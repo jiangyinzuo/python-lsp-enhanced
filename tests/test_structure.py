@@ -132,9 +132,9 @@ def test_filtered_class_and_instance_members():
 def test_command_completion_matches_all_valid_combinations(tmp_path):
     destination = tmp_path / 'completion.json'
     lua = (
-        f"vim.opt.rtp:prepend({json.dumps(str(ROOT))}); vim.cmd('runtime plugin/pyrefly_enhanced.lua'); "
-        "local all=vim.fn.getcompletion('PyreflyEnhanced ', 'cmdline'); "
-        "local chained=vim.fn.getcompletion('PyreflyEnhanced Demo -all+method:pu', 'cmdline'); "
+        f"vim.opt.rtp:prepend({json.dumps(str(ROOT))}); vim.cmd('runtime plugin/python_lsp_enhanced.lua'); "
+        "local all=vim.fn.getcompletion('PythonLspEnhanced ', 'cmdline'); "
+        "local chained=vim.fn.getcompletion('PythonLspEnhanced Demo -all+method:pu', 'cmdline'); "
         f"vim.fn.writefile({{vim.json.encode({{all=all,chained=chained}})}}, {json.dumps(str(destination))})"
     )
     result = subprocess.run(['nvim', '--headless', '-u', 'NONE', '+lua ' + lua, '+qa!'], capture_output=True, text=True, timeout=15)

@@ -3,7 +3,7 @@ local api = vim.api
 local root = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p:h:h')
 vim.opt.rtp:prepend(root)
 vim.g.mapleader = ' '
-vim.cmd('runtime plugin/pyrefly_enhanced.lua')
+vim.cmd('runtime plugin/python_lsp_enhanced.lua')
 local directory = vim.fn.tempname()
 vim.fn.mkdir(directory, 'p')
 local path = directory .. '/demo.py'
@@ -30,15 +30,15 @@ local function check()
   vim.cmd.cd(directory)
   vim.cmd.edit(path)
   local source_buffer = api.nvim_get_current_buf()
-  client_id = vim.lsp.start({ name = 'pyrefly',
+  client_id = vim.lsp.start({ name = 'generic-python-lsp',
     cmd = { 'pyrefly', 'lsp', '--indexing-mode', 'none', '--threads', '2' }, root_dir = directory })
   assert(vim.wait(30000, function()
     local client = vim.lsp.get_client_by_id(client_id)
     return client and client.initialized
   end, 50), 'LSP initialization timed out')
-  vim.cmd('PyreflyEnhanced Demo')
+  vim.cmd('PythonLspEnhanced Demo')
   assert(vim.wait(60000, function()
-    return api.nvim_buf_get_name(0) == 'pyrefly-enhanced://result'
+    return api.nvim_buf_get_name(0) == 'python-lsp-enhanced://result'
   end, 50), 'Result tab did not open')
   local result = api.nvim_get_current_buf()
   local tab_count = #api.nvim_list_tabpages()
@@ -63,7 +63,7 @@ local function check()
   end
   api.nvim_win_set_buf(0, result)
   vim.cmd('cd /tmp')
-  vim.cmd('PyreflyEnhanced Client -all+method:cls')
+  vim.cmd('PythonLspEnhanced Client -all+method:cls')
   assert(vim.wait(60000, function()
     local text = table.concat(api.nvim_buf_get_lines(result, 0, -1, false), '\n')
     return text:find('class Client:', 1, true) and not text:find('class Demo:', 1, true)
@@ -71,7 +71,7 @@ local function check()
   assert(api.nvim_get_current_buf() == result and #api.nvim_list_tabpages() == tab_count,
     'Query created another result buffer or tab')
   assert(vim.bo[source_buffer].modified == false, 'Inspection changed source')
-  local completions = vim.fn.getcompletion('PyreflyEnhanced Demo +member:pub:', 'cmdline')
+  local completions = vim.fn.getcompletion('PythonLspEnhanced Demo +member:pub:', 'cmdline')
   assert(vim.deep_equal(completions, { '+member:pub:self', '+member:pub:cls' }),
     'Completion must insert only one qualifier')
   print('PASS Neovim integration: real Pyrefly, initializer, cursor-sensitive gd, result reuse, completion')

@@ -25,9 +25,9 @@ class NvimClient:
         return json.loads(result.stdout)
 
     def source(self, path: Path) -> str:
-        return self.call('require("pyrefly_enhanced").source(' + json.dumps(str(path)) + ')')
+        return self.call('require("python_lsp_enhanced").source(' + json.dumps(str(path)) + ')')
     def buffers(self, root: Path) -> list[str]:
-        return self.call('require("pyrefly_enhanced").buffers(' + json.dumps(str(root)) + ')')
+        return self.call('require("python_lsp_enhanced").buffers(' + json.dumps(str(root)) + ')')
 
     def infer(self, match) -> dict[str, str]:
         if not match.members:
@@ -35,7 +35,7 @@ class NvimClient:
         member = match.members[0]
         args = ','.join((json.dumps(str(match.path)), str(member.line - 1), str(member.column),
                          str(int(self.timeout * 1000))))
-        return self.call('require("pyrefly_enhanced").complete(' + args + ')')
+        return self.call('require("python_lsp_enhanced").complete(' + args + ')')
 
 
 def discover() -> list[tuple[str, str]]:

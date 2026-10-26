@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_one_qualifier_per_completion(lead, expected, tmp_path):
     out = tmp_path / 'result.json'
     lua = (f'vim.opt.rtp:prepend({json.dumps(str(ROOT))}); '
-           f'local result=require("pyrefly_enhanced.completion").complete({json.dumps(lead)}); '
+           f'local result=require("python_lsp_enhanced.completion").complete({json.dumps(lead)}); '
            f'vim.fn.writefile({{vim.json.encode(result)}},{json.dumps(str(out))})')
     result = subprocess.run(['nvim', '--headless', '-u', 'NONE', '+lua ' + lua, '+qa!'],
                             capture_output=True, text=True, timeout=10)

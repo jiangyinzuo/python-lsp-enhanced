@@ -80,16 +80,13 @@ local function roots(client)
   return result
 end
 
-local function pyrefly(client)
-  return client.name:lower():find('pyrefly', 1, true) ~= nil
-end
-
-local function select_client(bufnr)
+local function select_client(bufnr, method)
   local path = api.nvim_buf_get_name(bufnr)
   local candidates = {}
   local best = -1
   for _, client in ipairs(vim.lsp.get_clients()) do
-    if pyrefly(client) and client.initialized and not client:is_stopped() then
+    if client.initialized and not client:is_stopped()
+      and client:supports_method(method, bufnr) then
       local score = -1
       for _, root in ipairs(roots(client)) do
         if contains(root, path) then
@@ -109,26 +106,23 @@ local function select_client(bufnr)
     end
   end
   if #candidates == 0 then
-    error('No initialized pyrefly client attached to or covering ' .. path)
+    error('No initialized LSP client supporting ' .. method .. ' attached to or covering ' .. path)
   end
   if #candidates > 1 then
     local names = {}
     for _, client in ipairs(candidates) do
       names[#names + 1] = client.name .. '#' .. client.id
     end
-    error('Ambiguous pyrefly clients for ' .. path .. ': ' .. table.concat(names, ', '))
+    error('Ambiguous LSP clients supporting ' .. method .. ' for ' .. path .. ': ' .. table.concat(names, ', '))
   end
   local client = candidates[1]
-  if not client:supports_method('textDocument/completion', bufnr) then
-    error('Pyrefly does not support completion for ' .. path)
-  end
   -- didOpen 需要 Python languageId，但 FileType 自动命令可能另启服务器。
   if vim.bo[bufnr].filetype == '' and path:match('%.pyi?$') then
     vim.cmd('noautocmd call setbufvar(' .. bufnr .. ', "&filetype", "python")')
   end
   if not vim.lsp.buf_is_attached(bufnr, client.id)
     and not vim.lsp.buf_attach_client(bufnr, client.id) then
-    error('Cannot attach existing pyrefly client to ' .. path)
+    error('Cannot attach existing LSP client to ' .. path)
   end
   return client
 end
@@ -146,7 +140,7 @@ end
 -- RPC 坐标固定为零基 UTF-16；转换为该客户端协商的编码。
 function M.complete(path, line, column, timeout_ms)
   local bufnr = buffer_for(path)
-  local client = select_client(bufnr)
+  local client = select_client(bufnr, 'textDocument/completion')
   if type(line) ~= 'number' or line < 0 or line % 1 ~= 0
     or line >= api.nvim_buf_line_count(bufnr) then
     error('Completion line is outside source buffer')
@@ -164,18 +158,18 @@ function M.complete(path, line, column, timeout_ms)
   local function request(method, params)
     local remaining = math.floor(deadline - (vim.uv or vim.loop).hrtime() / 1e6)
     if remaining <= 0 then
-      error('Pyrefly completion timed out')
+      error('LSP completion timed out')
     end
     -- request_sync 经 Client:request 刷新待发送 didChange，不能直接调用 rpc.request。
     local response, err = client:request_sync(method, params, remaining, bufnr)
     if not response then
-      error('Pyrefly ' .. method .. ' failed: ' .. tostring(err))
+      error('LSP ' .. method .. ' failed: ' .. tostring(err))
     end
     if response.err then
-      error('Pyrefly ' .. method .. ': ' .. (response.err.message or vim.inspect(response.err)))
+      error('LSP ' .. method .. ': ' .. (response.err.message or vim.inspect(response.err)))
     end
     if not api.nvim_buf_is_valid(bufnr) or api.nvim_buf_get_changedtick(bufnr) ~= tick then
-      error('Source changed during pyrefly completion: ' .. path)
+      error('Source changed during LSP completion: ' .. path)
     end
     return response.result
   end
@@ -226,10 +220,7 @@ function M.definition()
   end
   local bufnr = buffer_for(location.file)
   if span and span.kind == 'definition' then
-    local client = select_client(bufnr)
-    if not client:supports_method('textDocument/definition', bufnr) then
-      error('Pyrefly does not support definition for ' .. location.file)
-    end
+    local client = select_client(bufnr, 'textDocument/definition')
     local line = span.line - 1
     local text = api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1]
     local delta = cursor[2] - span.start
@@ -244,10 +235,10 @@ function M.definition()
       position = { line = line, character = character },
     }, options.timeout * 1000, bufnr)
     if not response then
-      error('Pyrefly definition failed: ' .. tostring(err))
+      error('LSP definition failed: ' .. tostring(err))
     end
     if response.err then
-      error('Pyrefly definition: ' .. (response.err.message or vim.inspect(response.err)))
+      error('LSP definition: ' .. (response.err.message or vim.inspect(response.err)))
     end
     local locations = response.result
     if not locations or locations == vim.NIL then
@@ -263,7 +254,7 @@ function M.definition()
       vim.lsp.util.show_document(locations[1], encoding, { focus = true, reuse_win = true })
     else
       vim.fn.setqflist({}, ' ', {
-        title = 'Pyrefly definitions',
+        title = 'LSP definitions',
         items = vim.lsp.util.locations_to_items(locations, encoding),
       })
       vim.cmd('copen')
@@ -281,7 +272,7 @@ end
 local function display(output, root, locations)
   if not result_buffer or not api.nvim_buf_is_valid(result_buffer) then
     result_buffer = api.nvim_create_buf(false, true)
-    api.nvim_buf_set_name(result_buffer, 'pyrefly-enhanced://result')
+    api.nvim_buf_set_name(result_buffer, 'python-lsp-enhanced://result')
     vim.bo[result_buffer].buftype = 'nofile'
     vim.bo[result_buffer].bufhidden = 'hide'
     vim.bo[result_buffer].swapfile = false
@@ -326,11 +317,9 @@ local function project_root(bufnr)
   local best
   local path = api.nvim_buf_get_name(bufnr)
   for _, client in ipairs(vim.lsp.get_clients({ bufnr = bufnr })) do
-    if pyrefly(client) then
-      for _, root in ipairs(roots(client)) do
-        if contains(root, path) and (not best or #root > #best) then
-          best = root
-        end
+    for _, root in ipairs(roots(client)) do
+      if contains(root, path) and (not best or #root > #best) then
+        best = root
       end
     end
   end
@@ -349,7 +338,7 @@ function M.run(query)
     return
   end
   if not vim.system then
-    error('pyrefly-enhanced requires Neovim 0.11 or newer')
+    error('python-lsp-enhanced requires Neovim 0.11 or newer')
   end
   local socket = vim.v.servername
   if socket == '' then
